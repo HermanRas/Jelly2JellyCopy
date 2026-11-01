@@ -5,7 +5,7 @@ from pathlib import Path
 import os
 
 APP_NAME = "Jelly2JellyCopy"
-VERSION = "0.1.0"
+VERSION = "1.0.0"
 BASE_DIR = Path(__file__).resolve().parent
 
 # The project root is synced to Google Drive, so nothing bulky or
