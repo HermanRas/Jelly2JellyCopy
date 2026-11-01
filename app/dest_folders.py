@@ -84,6 +84,22 @@ async def _from_api() -> list[Folder]:
     return _from_api_payload(r.json())
 
 
+async def refresh_library() -> bool:
+    """Ask your Jellyfin to scan, so finished downloads show up. Needs the API
+    key; without one, Jellyfin's own real-time monitoring or scheduled scan
+    picks the files up eventually."""
+    if not (config.DEST_URL and config.DEST_API_KEY):
+        return False
+    headers = {"Authorization": jellyfin.auth_header(db.device_id(), config.DEST_API_KEY)}
+    try:
+        async with httpx.AsyncClient(base_url=config.DEST_URL, timeout=jellyfin.TIMEOUT,
+                                     headers=headers, follow_redirects=True) as c:
+            r = await c.post("/Library/Refresh")
+        return r.is_success
+    except httpx.HTTPError:
+        return False
+
+
 def parse_env(spec: str) -> list[Folder]:
     """`movies=/movies,/kids-movies;tvshows=/tv;music=/music`"""
     folders = []

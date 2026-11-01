@@ -28,6 +28,9 @@ DEST_API_KEY = os.getenv("J2J_DEST_API_KEY", "")
 DEST_FOLDERS = os.getenv("J2J_DEST_FOLDERS", "")
 FREE_SPACE_RESERVE_GB = int(os.getenv("J2J_FREE_SPACE_RESERVE_GB", "50"))
 
+# The test suite turns the background download worker off and drives it by hand.
+WORKER_ENABLED = os.getenv("J2J_WORKER", "1") != "0"
+
 SESSION_COOKIE = "j2j_session"
 SESSION_MAX_AGE = 30 * 24 * 3600
 

@@ -10,6 +10,7 @@ sys.path.insert(0, str(ROOT))
 # Set before app.config is imported: the suite must never touch a real /data.
 os.environ.setdefault("J2J_DATA_DIR", tempfile.mkdtemp(prefix="j2j-test-"))
 os.environ.pop("J2J_APP_PASSWORD", None)
+os.environ["J2J_WORKER"] = "0"
 
 from fastapi.testclient import TestClient  # noqa: E402
 

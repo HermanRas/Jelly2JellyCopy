@@ -20,6 +20,9 @@
 
 * { box-sizing: border-box; }
 
+/* Classes like .btn set display, which would otherwise beat the hidden attribute. */
+[hidden] { display: none !important; }
+
 html { background: var(--bg); }
 
 body {
@@ -204,6 +207,32 @@ input:disabled, select:disabled { opacity: 0.5; }
 }
 .toast.show { opacity: 1; transform: none; }
 .toast-error { border-color: var(--danger); box-shadow: 0 0 12px rgba(255, 59, 59, 0.4); }
+
+/* ---- queue ---------------------------------------------------------------- */
+.queue-controls { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+.queue-controls .btn { padding: 6px 12px; font-size: 0.85rem; }
+.queue-paused { color: #ffd166; margin: 0 0 12px; font-size: 0.9rem; }
+.queue-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.job { padding: 8px 10px; border-radius: 8px; background: rgba(0, 0, 0, 0.35); border: 1px solid transparent; }
+.job-downloading { border-color: var(--card-border); }
+.job-head { display: flex; align-items: center; gap: 10px; }
+.job-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.job-name i { color: var(--neon); }
+.job-state { color: var(--muted); font-size: 0.85rem; white-space: nowrap; }
+.job-downloading .job-state { color: var(--neon); }
+.job-done .job-name, .job-skipped .job-name, .job-cancelled .job-name { color: var(--muted); }
+.job-failed .job-state { color: var(--danger); }
+.job .progress { margin-top: 6px; }
+.job-error { margin: 4px 0 0; font-size: 0.8rem; }
+.icon-btn {
+  background: none; border: 1px solid transparent; color: var(--muted); cursor: pointer;
+  border-radius: 6px; padding: 2px 6px; font-size: 0.9rem;
+}
+.icon-btn:hover { color: var(--neon); border-color: var(--neon); box-shadow: var(--glow); }
+@media (max-width: 480px) {
+  .job-head { flex-wrap: wrap; }
+  .job-name { flex-basis: 100%; white-space: normal; }
+}
 
 /* ---- browse --------------------------------------------------------------- */
 .page-head { margin-bottom: 20px; }

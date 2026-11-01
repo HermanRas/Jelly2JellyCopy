@@ -6,9 +6,15 @@ server that has stopped accepting us.
 """
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+
 import httpx
 
 from app import auth, db, jellyfin
+
+# Downloads: a slow source may pause a while between chunks of a multi-GB file.
+STREAM_TIMEOUT = httpx.Timeout(connect=15.0, read=120.0, write=30.0, pool=30.0)
 
 
 def current() -> dict | None:
@@ -28,7 +34,8 @@ async def connect(url: str, username: str, password: str) -> dict:
     db.save_connection(url=login.url, server_name=login.server_name, server_id=login.server_id,
                        version=login.version, user_name=login.user_name, user_id=login.user_id,
                        token_enc=auth.encrypt_token(login.token))
-    db.set_setting("queue_paused", "0")
+    # A queue paused by a disconnect or a rejected token stays paused: after a
+    # reconnect (perhaps to a different account) the user resumes it on purpose.
     return current()
 
 
@@ -49,16 +56,35 @@ async def disconnect() -> None:
         await jellyfin.logout(row["url"], db.device_id(), token)
 
 
-async def request(method: str, path: str, **kwargs) -> httpx.Response:
-    """An authenticated call to the source. A 401 destroys the stored token
-    and raises TokenRejected, so the UI can show "Reconnect"."""
+def _credentials() -> tuple[str, str]:
     row = db.get_connection()
     token = auth.decrypt_token(row["token_enc"]) if row else None
     if not token:
         if row:
             _forget()
         raise jellyfin.TokenRejected("Not connected to a source server.")
-    client = jellyfin.make_client(row["url"], db.device_id(), token)
+    return row["url"], token
+
+
+@asynccontextmanager
+async def stream(path: str, headers: dict | None = None) -> AsyncIterator[httpx.Response]:
+    """A streaming GET for downloads. Same 401 rule as request(); transport
+    errors are left to the caller, which retries and resumes."""
+    url, token = _credentials()
+    async with jellyfin.make_client(url, db.device_id(), token) as client:
+        client.timeout = STREAM_TIMEOUT
+        async with client.stream("GET", path, headers=headers) as r:
+            if r.status_code == 401:
+                _forget()
+                raise jellyfin.TokenRejected("The source server no longer accepts our login. Connect again.")
+            yield r
+
+
+async def request(method: str, path: str, **kwargs) -> httpx.Response:
+    """An authenticated call to the source. A 401 destroys the stored token
+    and raises TokenRejected, so the UI can show "Reconnect"."""
+    url, token = _credentials()
+    client = jellyfin.make_client(url, db.device_id(), token)
     async with client:
         try:
             r = await client.request(method, path, **kwargs)

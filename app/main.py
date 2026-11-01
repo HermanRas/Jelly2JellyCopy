@@ -1,22 +1,29 @@
 """FastAPI entrypoint: routes, the login gate and /healthz."""
 from __future__ import annotations
 
+import asyncio
+import json
 from contextlib import asynccontextmanager
 from urllib.parse import quote
 
 from fastapi import FastAPI, Form, Request
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
+from fastapi.responses import (FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response,
+                               StreamingResponse)
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 
-from app import auth, browse, config, connection, db, dest_folders, jellyfin
+from app import auth, browse, config, connection, db, dest_folders, jellyfin, queue
 
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     db.init()
+    if config.WORKER_ENABLED:
+        queue.worker.start()
     yield
+    if config.WORKER_ENABLED:
+        await queue.worker.stop()
 
 
 app = FastAPI(title=config.APP_NAME, docs_url=None, redoc_url=None, openapi_url=None,
@@ -170,6 +177,7 @@ async def api_connect(body: ConnectBody):
 @app.post("/api/disconnect")
 async def api_disconnect():
     await connection.disconnect()
+    queue.worker.poke()   # stop running downloads now, not on the next tick
     return {"connected": False, "connection": None}
 
 
@@ -241,3 +249,79 @@ async def api_poster(item_id: str):
     if not browse.valid_id(item_id):
         return Response(status_code=404)
     return await browse.poster(item_id)
+
+
+# ---- queue -----------------------------------------------------------------
+
+@app.get("/api/queue")
+async def api_queue():
+    return queue.snapshot()
+
+
+@app.post("/api/queue/pause")
+async def api_queue_pause():
+    queue.pause()
+    return queue.snapshot()
+
+
+@app.post("/api/queue/resume")
+async def api_queue_resume():
+    if connection.current() is None:
+        return JSONResponse({"error": "reconnect", "detail": "Connect to the source server first."},
+                            status_code=409)
+    queue.resume()
+    return queue.snapshot()
+
+
+@app.post("/api/queue/retry-failed")
+async def api_queue_retry_failed():
+    queue.retry_failed()
+    return queue.snapshot()
+
+
+@app.post("/api/queue/clear-finished")
+async def api_queue_clear_finished():
+    db.clear_finished()
+    return queue.snapshot()
+
+
+@app.post("/api/queue/jobs/{job_id}/cancel")
+async def api_job_cancel(job_id: int):
+    if not queue.cancel(job_id):
+        return JSONResponse({"error": "not_active"}, status_code=400)
+    return {"ok": True}
+
+
+@app.post("/api/queue/jobs/{job_id}/retry")
+async def api_job_retry(job_id: int):
+    if not queue.retry(job_id):
+        return JSONResponse({"error": "not_failed"}, status_code=400)
+    return {"ok": True}
+
+
+SSE_INTERVAL = 1.0
+SSE_HEARTBEAT = 15.0
+
+
+@app.get("/api/events")
+async def api_events(request: Request):
+    """Live queue state as Server-Sent Events: a full snapshot whenever it
+    changes (checked every second), and a comment line now and then so
+    proxies don't close an idle stream."""
+    async def events():
+        last, quiet = None, 0.0
+        while not await request.is_disconnected():
+            data = json.dumps(queue.snapshot(), separators=(",", ":"))
+            if data != last:
+                last, quiet = data, 0.0
+                yield f"event: queue\ndata: {data}\n\n"
+            elif quiet >= SSE_HEARTBEAT:
+                quiet = 0.0
+                yield ": keep-alive\n\n"
+            await asyncio.sleep(SSE_INTERVAL)
+            quiet += SSE_INTERVAL
+
+    # X-Accel-Buffering: nginx (and so nginx-proxy-manager) would otherwise
+    # buffer the stream and deliver progress in lumps.
+    return StreamingResponse(events(), media_type="text/event-stream",
+                             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})

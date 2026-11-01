@@ -35,8 +35,6 @@ triggers a library scan.
   restarts and shows live progress.
 - Half-written files never appear in your library. Downloads go to
   `<name>.j2jpart` and are renamed only once complete and the size checks out.
-- Paste a list of Jellyfin links (`… - season 1`, `… - ALL`) to queue many
-  items in one go.
 - Black and neon-green theme, with no CDNs and no external calls besides the
   two Jellyfin servers.
 

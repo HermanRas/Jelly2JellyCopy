@@ -123,6 +123,12 @@ jobs:
           echo "$page" | grep -q 'default app password is in use' \
             || fail "the default-password banner is missing"
 
+          # The queue answers (the worker started with the app) and streams.
+          curl -sf -b /tmp/jar http://localhost:8000/api/queue | grep -q '"jobs":\[\]' \
+            || fail "the queue API did not answer with an empty queue"
+          timeout 3 curl -s -N -b /tmp/jar http://localhost:8000/api/events > /tmp/events || true
+          grep -q '^event: queue' /tmp/events || fail "the event stream sent nothing"
+
       - name: It serves its assets from the image
         run: |
           fail() { echo "::error::$1"; docker compose logs jelly2jelly; exit 1; }
