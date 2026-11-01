@@ -28,6 +28,7 @@
       {% if connected() %}
       <a href="/browse" class="{{ 'active' if request.url.path.startswith('/browse') }}"><i class="bi bi-cloud-arrow-down"></i> Download</a>
       {% endif %}
+      <a href="/" class="queue-badge" id="queue-badge" title="Download queue" hidden><i class="bi bi-list-task"></i> <span></span></a>
       <form method="post" action="/logout">
         <button type="submit" class="link"><i class="bi bi-box-arrow-right"></i> Log out</button>
       </form>

@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import json
 from contextlib import asynccontextmanager
+from typing import Literal
 from urllib.parse import quote
 
 from fastapi import FastAPI, Form, Request
@@ -13,7 +14,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 
-from app import auth, browse, config, connection, db, dest_folders, jellyfin, queue
+from app import auth, browse, config, connection, db, dest_folders, enqueue, jellyfin, queue
 
 
 @asynccontextmanager
@@ -227,21 +228,74 @@ class DestBody(BaseModel):
     path: str
 
 
-@app.post("/api/libraries/{library_id}/dest")
-async def api_set_dest(library_id: str, body: DestBody):
+async def _check_dest(library_id: str, path: str) -> JSONResponse | None:
+    """None if `path` is a folder we offer for this library and can write to.
+
+    This path decides where files land on disk, so it is never taken on trust
+    from the browser."""
     if not browse.valid_id(library_id):
         return JSONResponse({"error": "bad_id"}, status_code=400)
     lib = await browse.library(library_id)
     if lib is None:
         return JSONResponse({"error": "not_found"}, status_code=404)
     folders = dest_folders.offered(await dest_folders.detect(), lib["type"])
-    # Only a folder we offered and can write to: this path later decides
-    # where files land on disk, so it is never taken on trust from the browser.
-    if not any(f.path == body.path and f.available for f in folders):
-        return JSONResponse({"error": "bad_folder", "detail": "That folder isn't on offer."},
+    if not any(f.path == path and f.available for f in folders):
+        return JSONResponse({"error": "bad_folder",
+                             "detail": "Choose a destination folder at the top of the page first."},
                             status_code=400)
+    return None
+
+
+@app.post("/api/libraries/{library_id}/dest")
+async def api_set_dest(library_id: str, body: DestBody):
+    if (error := await _check_dest(library_id, body.path)) is not None:
+        return error
     db.set_setting(_dest_key(library_id), body.path)
     return {"path": body.path}
+
+
+@app.get("/api/series/{series_id}/seasons")
+async def api_seasons(series_id: str):
+    if not browse.valid_id(series_id):
+        return JSONResponse({"error": "bad_id"}, status_code=400)
+    return {"seasons": await enqueue.seasons(series_id)}
+
+
+class QueueBody(BaseModel):
+    library_id: str
+    item_id: str
+    type: Literal["Series", "Movie", "MusicAlbum"]
+    dest: str
+    which: Literal["all", "first", "seasons"] = "all"
+    season_ids: list[str] = []
+
+
+@app.post("/api/queue")
+async def api_enqueue(body: QueueBody):
+    if not browse.valid_id(body.item_id) or not all(browse.valid_id(s) for s in body.season_ids):
+        return JSONResponse({"error": "bad_id"}, status_code=400)
+    if (error := await _check_dest(body.library_id, body.dest)) is not None:
+        return error
+
+    if body.type == "Series":
+        plan = await enqueue.plan_series(body.item_id, body.dest, body.which, body.season_ids)
+    elif body.type == "Movie":
+        plan = await enqueue.plan_movie(body.item_id, body.dest)
+    else:
+        plan = await enqueue.plan_album(body.item_id, body.dest)
+
+    added, dupes = db.add_jobs(plan.jobs)
+    db.set_setting(_dest_key(body.library_id), body.dest)
+    queue.worker.poke()
+    return {"added": added, "already_queued": dupes, "files": len(plan.jobs), "bytes": plan.bytes,
+            "unavailable": plan.unavailable, "unsafe": plan.unsafe, "dest": body.dest,
+            "kind": {"Series": "episode", "Movie": "movie", "MusicAlbum": "track"}[body.type]}
+
+
+@app.get("/api/queue/counts")
+async def api_queue_counts():
+    # Cheap enough to poll from the header on every page.
+    return {"counts": db.job_counts(), "paused": queue.is_paused()}
 
 
 @app.get("/api/items/{item_id}/poster")

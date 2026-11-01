@@ -7,7 +7,7 @@
 
 {# Pinned at the top and asked every time a library is opened: someone with
    both /movies and /kids-movies must never have the choice made silently. #}
-<section class="card dest-card" id="dest-card" data-library="{{ lib.id }}">
+<section class="card dest-card{% if not selected %} dest-missing{% endif %}" id="dest-card" data-library="{{ lib.id }}">
   <label for="dest">Download to</label>
   <select id="dest" {% if not folders %}disabled{% endif %}>
     <option value="" {% if not selected %}selected{% endif %} disabled>Choose a destination folder…</option>
@@ -44,6 +44,19 @@
 <div class="item-grid" id="items" data-library="{{ lib.id }}"></div>
 <div id="more" class="muted loading-more" hidden><i class="bi bi-hourglass-split"></i> Loading…</div>
 <div id="sentinel"></div>
+
+<dialog class="card modal" id="seasons-modal">
+  <form method="dialog" id="seasons-form">
+    <h2 id="seasons-title">Choose seasons</h2>
+    <p class="muted" id="seasons-status">Loading seasons…</p>
+    <label class="check select-all" hidden><input type="checkbox" id="seasons-all"> Select all</label>
+    <ul class="season-list" id="seasons-list"></ul>
+    <div class="actions">
+      <button class="btn" value="cancel" formnovalidate>Cancel</button>
+      <button class="btn btn-primary" value="ok" id="seasons-ok" disabled><i class="bi bi-cloud-arrow-down"></i> OK</button>
+    </div>
+  </form>
+</dialog>
 {% endblock %}
 
 {% block scripts %}<script src="/static/js/browse.js"></script>{% endblock %}

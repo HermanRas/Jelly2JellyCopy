@@ -190,11 +190,18 @@ input:disabled, select:disabled { opacity: 0.5; }
 .login-banner { width: 100%; border-radius: 10px; }
 
 /* ---- toast ---------------------------------------------------------------- */
-.toast {
+#toasts {
   position: fixed;
   right: 16px;
   bottom: 16px;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
   max-width: calc(100vw - 32px);
+}
+.toast {
   background: var(--card);
   backdrop-filter: blur(14px);
   border: 1px solid var(--neon);
@@ -282,5 +289,23 @@ input:disabled, select:disabled { opacity: 0.5; }
 .item-actions { display: flex; flex-wrap: wrap; gap: 4px; margin-top: auto; }
 @media (max-width: 480px) { .item-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; } }
 .loading-more { text-align: center; padding: 16px; }
+
+.btn-small { padding: 4px 8px; font-size: 0.75rem; border-radius: 6px; }
+.dest-missing { border-color: var(--neon); box-shadow: var(--glow); }
+
+.queue-badge { color: var(--neon) !important; text-shadow: var(--text-glow); }
+
+/* ---- season picker -------------------------------------------------------- */
+.modal { color: var(--text); width: min(480px, calc(100vw - 32px)); max-height: calc(100vh - 64px); padding: 20px; }
+.modal::backdrop { background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(3px); }
+.modal h2 { margin-bottom: 8px; }
+.modal form { display: flex; flex-direction: column; gap: 10px; }
+.season-list { list-style: none; margin: 0; padding: 0; max-height: 50vh; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; }
+.check { display: flex; align-items: center; gap: 10px; color: var(--text); font-size: 0.95rem; cursor: pointer; padding: 6px 8px; border-radius: 6px; }
+.check:hover { background: rgba(57, 255, 20, 0.06); }
+.check input { width: auto; accent-color: var(--neon); }
+.check .muted { margin-left: auto; font-size: 0.82rem; }
+.empty-season .check { opacity: 0.45; cursor: not-allowed; }
+.select-all { border-bottom: 1px solid var(--card-border); border-radius: 0; }
 
 .footer { color: var(--muted); font-size: 0.8rem; padding-bottom: 16px; text-align: center; }
