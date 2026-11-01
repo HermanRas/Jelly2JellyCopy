@@ -1,0 +1,21 @@
+# Nothing machine-generated belongs in this tree - it syncs to Google Drive.
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+data/
+*.db
+*.key
+.env
+app/static/vendor/
+
+# The repo is public. Notes that name real servers, hosts, paths or links -
+# the plan, the agent handover, sample import lists, a real deployment's
+# compose - stay on this machine only.
+plan.md
+CODING_AGENT.md
+samples/
+deploy/

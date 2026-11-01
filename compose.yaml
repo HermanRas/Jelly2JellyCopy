@@ -1,0 +1,23 @@
+# Local development: builds the image and publishes 8000.
+#   docker compose up --build        then open http://localhost:8000
+# The deployment example (image from GHCR, media mounts, no published port)
+# is compose.prod.yaml.
+services:
+  jelly2jelly:
+    build: .
+    image: jelly2jelly
+    container_name: jelly2jelly
+    ports:
+      - "8000:8000"
+    environment:
+      # Unset here on purpose, so a dev run shows the default-password banner.
+      J2J_APP_PASSWORD: ${J2J_APP_PASSWORD:-}
+      J2J_DEST_URL: ${J2J_DEST_URL:-}
+      J2J_DEST_API_KEY: ${J2J_DEST_API_KEY:-}
+    volumes:
+      # Token, queue and secret persist here, outside the Drive-synced project root.
+      - j2j-data:/data
+    restart: unless-stopped
+
+volumes:
+  j2j-data:

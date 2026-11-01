@@ -1,0 +1,19 @@
+.git
+.github
+.gitignore
+*.md
+# tests are NOT ignored: the test stage needs them. The runtime stage never
+# copies them, so they do not reach the published image.
+data
+samples
+.env
+*.key
+__pycache__
+**/__pycache__
+*.pyc
+.venv
+venv
+.pytest_cache
+.mypy_cache
+.ruff_cache
+app/static/vendor

@@ -1,0 +1,31 @@
+# Example deployment. Copy it to your server as docker-compose.yml, with a
+# .env next to it holding J2J_APP_PASSWORD and J2J_DEST_API_KEY, and change the
+# host side of every media mount to your own folders.
+#
+# The one rule: mount your media folders at the SAME container paths your
+# Jellyfin container uses. Jellyfin reports its library folders as paths inside
+# its own container (/movies, /tv, ...), and those are offered as destinations
+# here, so they must mean the same thing in both containers.
+services:
+  app:
+    image: ghcr.io/hermanras/jelly2jellycopy:${J2J_TAG:-latest}
+    container_name: jelly2jelly
+    user: "1000:1000"                 # same PUID/PGID as your Jellyfin
+    environment:
+      TZ: Etc/UTC
+      J2J_APP_PASSWORD: ${J2J_APP_PASSWORD}         # overrides the image default
+      J2J_DEST_URL: http://jellyfin:8096            # your Jellyfin, over the shared network
+      J2J_DEST_API_KEY: ${J2J_DEST_API_KEY}         # Jellyfin Dashboard -> API Keys
+    volumes:
+      - ./data:/data                  # must be writable by the user above
+      - /path/to/media/movies:/movies
+      - /path/to/media/tv:/tv
+      - /path/to/media/music:/music
+    # No published port: reach it through your reverse proxy, which forwards
+    # to http://jelly2jelly:8000 on the same Docker network.
+    restart: unless-stopped
+
+networks:
+  default:
+    name: proxy        # the existing network your Jellyfin and reverse proxy are on
+    external: true

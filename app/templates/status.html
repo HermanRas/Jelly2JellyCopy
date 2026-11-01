@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block content %}
+{# The connection form and the queue are wired up in later phases; until
+   then they render in their idle state. #}
+<div class="status-grid">
+  <section class="card">
+    <div class="card-head">
+      <h2>Connection status</h2>
+      <span class="badge badge-off"><i class="bi bi-circle"></i> Not connected</span>
+    </div>
+    <form class="form-grid" id="connect-form" onsubmit="return false">
+      <label for="source-url">Source URL</label>
+      <input id="source-url" name="url" type="url" placeholder="https://jellyfin.example.com" disabled>
+      <label for="source-user">Username</label>
+      <input id="source-user" name="username" autocomplete="off" disabled>
+      <label for="source-pw">Password</label>
+      <input id="source-pw" name="password" type="password" autocomplete="off" disabled>
+      <div class="actions">
+        <button class="btn btn-primary" disabled><i class="bi bi-plug"></i> Test &amp; Connect</button>
+      </div>
+    </form>
+  </section>
+
+  <a class="tile tile-disabled" aria-disabled="true" title="Connect to a source server first">
+    <i class="bi bi-cloud-arrow-down"></i>
+    <span>Download</span>
+  </a>
+</div>
+
+<section class="card">
+  <div class="card-head">
+    <h2>Download queue</h2>
+    <span class="muted">0 queued</span>
+  </div>
+  <p class="muted empty">The queue is empty.</p>
+</section>
+{% endblock %}

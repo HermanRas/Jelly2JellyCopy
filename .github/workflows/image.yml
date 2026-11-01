@@ -1,0 +1,195 @@
+# Builds the Jelly2JellyCopy container, proves it answers, and publishes it to
+# GHCR.
+#
+# The order matters: nothing is pushed that has not first been started and
+# talked to. "The Dockerfile builds" is a weaker claim than "the image answers
+# on 8000, keeps its pages behind the login, and serves its fonts from inside
+# the image" - and the second is the only one worth publishing on, because
+# friends pull `latest` straight onto their media servers.
+name: image
+
+on:
+  push:
+    branches: [main]
+    # A release tag publishes the same image under its version, so a friend
+    # can pin `:v1` and never be moved by the next push to main.
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: docker/setup-buildx-action@v4
+
+      - name: Work out the image name
+        # Docker repository names must be lowercase and GitHub account names
+        # need not be - `HermanRas` is rejected outright by the builder. Done
+        # here rather than hardcoded so a fork publishes under its own owner
+        # without editing the workflow.
+        run: echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/jelly2jellycopy" >> "$GITHUB_ENV"
+
+      - name: Work out the tags to publish
+        # Three kinds of tag, each answering a different question:
+        #   latest       - what a host pulls
+        #   sha-<commit> - what you name when something is wrong with latest
+        #   v1, v1.2…    - what a friend pins so a push to main cannot move it
+        run: |
+          {
+            echo "TAGS<<TAGS_EOF"
+            echo "${IMAGE}:latest"
+            echo "${IMAGE}:sha-${GITHUB_SHA}"
+            if [ "${GITHUB_REF_TYPE}" = tag ]; then
+              echo "${IMAGE}:${GITHUB_REF_NAME}"
+            fi
+            echo "TAGS_EOF"
+          } >> "$GITHUB_ENV"
+
+      - name: Build the test image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          target: test
+          load: true
+          tags: jelly2jelly-test:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Test suite
+        # Runs against the same base layers the runtime image is built from, so
+        # a dependency that is missing at runtime is missing here too.
+        run: docker run --rm jelly2jelly-test:ci
+
+      - name: Build the runtime image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          target: runtime
+          # Loaded into the local daemon rather than pushed: the push is a
+          # separate step at the end, after the checks below have passed. The
+          # tag matches compose.yaml so `up --no-build` finds it.
+          load: true
+          tags: jelly2jelly:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Start the container
+        run: |
+          docker compose up -d --no-build
+
+          # Wait on /healthz, which reports whether the vendored assets are
+          # actually present - not just whether uvicorn is listening.
+          for i in $(seq 1 60); do
+            if curl -sf http://localhost:8000/healthz | grep -q '"vendor":true'; then
+              echo "ready after ${i}s"; exit 0
+            fi
+            # A container that has exited is never going to become ready, and
+            # the reason is in its log rather than in another 59 seconds.
+            [ "$(docker inspect -f '{{.State.Running}}' "$(docker compose ps -aq jelly2jelly)")" = false ] && break
+            sleep 1
+          done
+
+          echo "::error::the container never reported healthy"
+          docker compose ps -a
+          docker compose logs jelly2jelly
+          exit 1
+
+      - name: Pages stay behind the login
+        run: |
+          fail() { echo "::error::$1"; docker compose logs jelly2jelly; exit 1; }
+          status() { curl -s -o /dev/null -w '%{http_code}' "http://localhost:8000$1"; }
+
+          # This app holds a token for someone else's server; an image that
+          # serves its pages without the password must never be published.
+          [ "$(status /)" = 303 ] || fail "/ answered $(status /) without a session"
+          [ "$(status /api/anything)" = 401 ] || fail "/api answered without a session"
+          [ "$(status /login)" = 200 ] || fail "/login answered $(status /login)"
+
+          # Wrong password is refused...
+          code=$(curl -s -o /dev/null -w '%{http_code}' -X POST http://localhost:8000/login -d password=wrong)
+          [ "$code" = 401 ] || fail "a wrong password answered $code"
+
+          # ...and the image default lets you in, with the warning banner showing.
+          curl -s -c /tmp/jar -o /dev/null -X POST http://localhost:8000/login -d password=jelly2jelly
+          page=$(curl -s -b /tmp/jar http://localhost:8000/)
+          echo "$page" | grep -q 'Connection status' || fail "the default password did not log in"
+          echo "$page" | grep -q 'default app password is in use' \
+            || fail "the default-password banner is missing"
+
+      - name: It serves its assets from the image
+        run: |
+          fail() { echo "::error::$1"; docker compose logs jelly2jelly; exit 1; }
+          status() { curl -s -o /dev/null -w '%{http_code}' "http://localhost:8000$1"; }
+
+          for asset in \
+            /vendor/bootstrap-icons/bootstrap-icons.min.css \
+            /vendor/bootstrap-icons/fonts/bootstrap-icons.woff2 \
+            /vendor/fonts/fonts.css \
+            /static/css/theme.css /static/js/app.js /static/img/banner.jpeg \
+            /favicon.ico /static/img/icon-192.png /static/img/apple-touch-icon.png
+          do
+            code=$(status "$asset")
+            [ "$code" = 200 ] || fail "$asset answered $code"
+          done
+
+      - name: Nothing is loaded from a CDN
+        run: |
+          # One stray CDN reference and the app quietly depends on a third
+          # party for every page load on someone's media server.
+          for path in / /login; do
+            if curl -s -b /tmp/jar "http://localhost:8000$path" \
+                 | grep -oE 'https?://[^"]*(cdn|googleapis|gstatic|unpkg|jsdelivr)[^"]*'; then
+              echo "::error::$path references an external host"
+              exit 1
+            fi
+          done
+          # ...including inside the self-hosted font stylesheet, which is
+          # rewritten at build time and is the one most likely to regress.
+          if curl -s http://localhost:8000/vendor/fonts/fonts.css | grep -q gstatic; then
+            echo "::error::the font stylesheet still points at Google"
+            exit 1
+          fi
+
+      - name: Sessions survive a restart
+        run: |
+          # The secret is persisted in /data; if it were regenerated per start,
+          # every restart would log everyone out (and, from phase 2, lose the
+          # encrypted source token).
+          docker compose restart jelly2jelly
+          for i in $(seq 1 60); do
+            curl -sf http://localhost:8000/healthz >/dev/null && break
+            sleep 1
+          done
+          code=$(curl -s -o /dev/null -w '%{http_code}' -b /tmp/jar http://localhost:8000/)
+          [ "$code" = 200 ] || { echo "::error::the session did not survive a restart ($code)"; exit 1; }
+
+      - name: Tear down
+        if: always()
+        run: docker compose down -v
+
+      - name: Log in to GHCR
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          target: runtime
+          push: true
+          tags: ${{ env.TAGS }}
+          # Every layer is already in the cache from the build above, so this
+          # step assembles and uploads rather than rebuilding.
+          cache-from: type=gha

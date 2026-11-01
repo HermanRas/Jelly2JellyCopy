@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>{% block title %}{{ title }}{% endblock %} &middot; {{ app_name }}</title>
+  <link rel="icon" href="/favicon.ico" sizes="any">
+  <link rel="icon" type="image/png" href="/static/img/icon-192.png">
+  <link rel="apple-touch-icon" href="/static/img/apple-touch-icon.png">
+  <link rel="stylesheet" href="/vendor/fonts/fonts.css">
+  <link rel="stylesheet" href="/vendor/bootstrap-icons/bootstrap-icons.min.css">
+  <link rel="stylesheet" href="/static/css/theme.css">
+</head>
+<body>
+  {% if default_password() %}
+  <div class="banner-danger" role="alert">
+    <i class="bi bi-exclamation-triangle-fill"></i>
+    The default app password is in use. Set <code>J2J_APP_PASSWORD</code> in your compose file.
+  </div>
+  {% endif %}
+
+  {% block header %}
+  <header class="masthead">
+    <a class="brand" href="/"><i class="bi bi-arrow-left-right"></i> Jelly2Jelly<span>Copy</span></a>
+    <nav>
+      <a href="/" class="{{ 'active' if request.url.path == '/' }}"><i class="bi bi-activity"></i> Status</a>
+      <form method="post" action="/logout">
+        <button type="submit" class="link"><i class="bi bi-box-arrow-right"></i> Log out</button>
+      </form>
+    </nav>
+  </header>
+  {% endblock %}
+
+  <main class="container">
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer class="container footer">{{ app_name }} v{{ version }}</footer>
+
+  <script src="/static/js/app.js"></script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>
