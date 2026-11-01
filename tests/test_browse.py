@@ -102,7 +102,7 @@ def test_items_passes_filters(connected, source):
     body = connected.get(f"/api/libraries/{MOVIES}/items?start=60&search=hea&letter=h").json()
     assert body["total"] == 61
     assert body["items"] == [{"id": "b" * 32, "name": "Heat", "type": "Movie", "year": 1995,
-                              "child_count": None, "has_image": True}]
+                              "child_count": None, "has_image": True, "on_server": False}]
     params = route.calls.last.request.url.params
     assert params["SearchTerm"] == "hea"
     assert params["NameStartsWith"] == "H"

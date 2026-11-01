@@ -19,8 +19,27 @@ normal API. It writes them straight into the folders your Jellyfin libraries
 already watch, named the way Jellyfin, Sonarr and Radarr expect, and then
 triggers a library scan.
 
-> **Status:** in development. The skeleton (login, theme, container, CI) is
-> done; connecting, browsing and the download queue are being built.
+> **Status:** feature-complete and in testing. Connecting, browsing, queuing
+> and downloading all work; first real-world runs are under way.
+
+## Screenshots
+
+**Browse a library.** Pick where downloads go at the top, then queue what you
+want. Items you already have are marked "On my server".
+
+![Browsing a movie library with the destination picker and a queued movie](docs/screenshots/browse.png)
+
+**Pick seasons.** "Manual…" on a series shows every season with its episode
+count and size.
+
+![The season picker with all seasons ticked](docs/screenshots/season-picker.png)
+
+**The queue.** Live progress, pause/resume, retry and cancel. A paused
+download resumes where it stopped.
+
+![The download queue, paused, with a half-finished download and a failed item](docs/screenshots/queue-paused.png)
+
+<sub>Screenshots use a demo server with made-up titles.</sub>
 
 ## Features
 
@@ -35,6 +54,9 @@ triggers a library scan.
   restarts and shows live progress.
 - Half-written files never appear in your library. Downloads go to
   `<name>.j2jpart` and are renamed only once complete and the size checks out.
+- External subtitle files (SRT, ASS, VTT) come along with their video.
+- Settings for downloads at a time, a bandwidth cap, a free-space reserve,
+  specials and subtitles.
 - Black and neon-green theme, with no CDNs and no external calls besides the
   two Jellyfin servers.
 

@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-head"><h1>Settings</h1></div>
+
+{% if saved %}<p class="notice"><i class="bi bi-check-circle"></i> {{ saved }}</p>{% endif %}
+{% if errors %}<p class="error">{% for e in errors %}{{ e }}<br>{% endfor %}</p>{% endif %}
+
+<section class="card">
+  <div class="card-head"><h2>Downloads</h2></div>
+  <form method="post" action="/settings" class="settings-form">
+    <label for="concurrency">Downloads at a time</label>
+    <div>
+      <select id="concurrency" name="concurrency">
+        {% for n in range(1, 5) %}<option value="{{ n }}" {% if n == s.concurrency %}selected{% endif %}>{{ n }}</option>{% endfor %}
+      </select>
+      <p class="hint">One is kindest to the source server.</p>
+    </div>
+
+    <label for="bandwidth">Bandwidth cap (KB/s)</label>
+    <div>
+      <input id="bandwidth" name="bandwidth_kbps" type="number" min="0" max="10000000" value="{{ s.bandwidth_kbps }}">
+      <p class="hint">0 = no cap. Applies to each download.</p>
+    </div>
+
+    <label for="reserve">Keep free (GB)</label>
+    <div>
+      <input id="reserve" name="free_space_reserve_gb" type="number" min="0" max="1000000" value="{{ s.free_space_reserve_gb }}">
+      <p class="hint">A download won't start if it would leave less than this free on the destination disk.</p>
+    </div>
+
+    <span class="label">Include specials</span>
+    <label class="check"><input type="checkbox" name="include_specials" value="1" {% if s.include_specials %}checked{% endif %}>
+      "Queue all" also queues Season 00 (specials)</label>
+
+    <span class="label">Subtitles</span>
+    <label class="check"><input type="checkbox" name="subtitles" value="1" {% if s.subtitles %}checked{% endif %}>
+      Also download external subtitle files (SRT, ASS, VTT)</label>
+
+    <div class="actions"><button class="btn btn-primary" type="submit"><i class="bi bi-save"></i> Save</button></div>
+  </form>
+</section>
+
+<section class="card">
+  <div class="card-head">
+    <h2>Destination folders</h2>
+    <form method="post" action="/settings/redetect"><button class="btn btn-small" type="submit"><i class="bi bi-arrow-repeat"></i> Look again</button></form>
+  </div>
+  <p class="muted">
+    Found via {{ {"api": "your Jellyfin's libraries", "env": "J2J_DEST_FOLDERS", "mounts": "the folders mounted into this container"}[detection.method] }}.
+  </p>
+  {% if detection.warning %}<p class="error">{{ detection.warning }}</p>{% endif %}
+  <ul class="folder-list">
+    {% for f in detection.folders %}
+    <li class="{{ 'ok' if f.available else 'off' }}">
+      <i class="bi {{ 'bi-check-circle' if f.available else 'bi-slash-circle' }}"></i>
+      <span>{{ f.library }} — <code>{{ f.path }}</code></span>
+      <span class="muted">{{ f.collection_type or "any type" }}{% if not f.available %} · {{ f.reason }}{% endif %}</span>
+    </li>
+    {% else %}
+    <li class="off"><i class="bi bi-slash-circle"></i> None found.</li>
+    {% endfor %}
+  </ul>
+</section>
+
+<section class="card">
+  <div class="card-head">
+    <h2>Your Jellyfin</h2>
+    {% if dest_configured %}
+    <form method="post" action="/settings/scan"><button class="btn btn-small" type="submit"><i class="bi bi-arrow-clockwise"></i> Scan library now</button></form>
+    {% endif %}
+  </div>
+  <dl class="facts">
+    <dt>Address</dt><dd>{% if dest_url %}<code>{{ dest_url }}</code>{% else %}<span class="muted">not set (J2J_DEST_URL)</span>{% endif %}</dd>
+    <dt>API key</dt><dd>{{ "set" if dest_key else "not set (J2J_DEST_API_KEY)" }}</dd>
+    <dt>App password</dt>
+    <dd>{% if default_password() %}<span class="error">the default — set J2J_APP_PASSWORD</span>{% else %}your own{% endif %}</dd>
+  </dl>
+  <p class="hint">These come from the container's environment; change them in your compose file.</p>
+</section>
+{% endblock %}

@@ -6,7 +6,7 @@ import re
 
 from fastapi import Response
 
-from app import connection, db, jellyfin
+from app import connection, db, jellyfin, mine
 
 # Jellyfin ids are 32 hex chars. Checked before they go into a source URL
 # path, so a crafted id can't steer the request somewhere else.
@@ -63,7 +63,7 @@ async def items(library_id: str, start: int = 0, search: str = "", letter: str =
         "ParentId": library_id,
         "IncludeItemTypes": ITEM_TYPES,
         "Recursive": "true",
-        "Fields": "ProductionYear,ChildCount",
+        "Fields": "ProductionYear,ChildCount,ProviderIds",
         "SortBy": "SortName",
         "SortOrder": "Ascending",
         "StartIndex": str(max(start, 0)),
@@ -78,13 +78,16 @@ async def items(library_id: str, start: int = 0, search: str = "", letter: str =
         params["NameLessThan"] = "A"
     elif letter:
         params["NameStartsWith"] = letter
-    body = _check(await connection.request("GET", "/Items", params=params))
+    body, mine_index = await asyncio.gather(
+        connection.request("GET", "/Items", params=params), mine.index())
+    body = _check(body)
     return {
         "total": body.get("TotalRecordCount", 0),
         "start": start,
         "items": [{"id": i["Id"], "name": i.get("Name") or "?", "type": i.get("Type"),
                    "year": i.get("ProductionYear"), "child_count": i.get("ChildCount"),
-                   "has_image": bool((i.get("ImageTags") or {}).get("Primary"))}
+                   "has_image": bool((i.get("ImageTags") or {}).get("Primary")),
+                   "on_server": mine.on_server(i, mine_index)}
                   for i in body.get("Items", [])],
     }
 

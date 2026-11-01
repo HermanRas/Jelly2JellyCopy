@@ -14,7 +14,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 
-from app import auth, browse, config, connection, db, dest_folders, enqueue, jellyfin, queue
+from app import auth, browse, config, connection, db, dest_folders, enqueue, jellyfin, mine, queue
 
 
 @asynccontextmanager
@@ -284,10 +284,12 @@ async def api_enqueue(body: QueueBody):
     else:
         plan = await enqueue.plan_album(body.item_id, body.dest)
 
-    added, dupes = db.add_jobs(plan.jobs)
+    # Videos first, so each one is queued ahead of its own subtitles.
+    added, dupes = db.add_jobs(plan.main_jobs)
+    subtitles, _ = db.add_jobs(plan.subtitle_jobs)
     db.set_setting(_dest_key(body.library_id), body.dest)
     queue.worker.poke()
-    return {"added": added, "already_queued": dupes, "files": len(plan.jobs), "bytes": plan.bytes,
+    return {"added": added, "already_queued": dupes, "subtitles": subtitles, "bytes": plan.bytes,
             "unavailable": plan.unavailable, "unsafe": plan.unsafe, "dest": body.dest,
             "kind": {"Series": "episode", "Movie": "movie", "MusicAlbum": "track"}[body.type]}
 
@@ -351,6 +353,82 @@ async def api_job_retry(job_id: int):
     if not queue.retry(job_id):
         return JSONResponse({"error": "not_failed"}, status_code=400)
     return {"ok": True}
+
+
+# ---- settings ----------------------------------------------------------------
+
+def _settings() -> dict:
+    return {
+        "concurrency": queue.concurrency(),
+        "bandwidth_kbps": queue.bandwidth_bytes() // 1024,
+        "free_space_reserve_gb": queue.reserve_bytes() // 1_000_000_000,
+        "include_specials": enqueue.include_specials(),
+        "subtitles": enqueue.include_subtitles(),
+    }
+
+
+async def _settings_page(request: Request, saved: str = "", errors: list[str] | None = None,
+                         status_code: int = 200):
+    return templates.TemplateResponse(request, "settings.html", {
+        "title": "Settings", "s": _settings(), "saved": saved, "errors": errors or [],
+        "detection": await dest_folders.detect(),
+        "dest_url": config.DEST_URL, "dest_key": bool(config.DEST_API_KEY),
+        "dest_configured": bool(config.DEST_URL and config.DEST_API_KEY),
+    }, status_code=status_code)
+
+
+@app.get("/settings", response_class=HTMLResponse)
+async def settings_page(request: Request, saved: str = ""):
+    messages = {"1": "Saved.", "folders": "Looked for destination folders again.",
+                "scan": "Asked your Jellyfin to scan its libraries.",
+                "scan-failed": "Your Jellyfin didn't accept the scan request."}
+    return await _settings_page(request, saved=messages.get(saved, ""))
+
+
+def _int_in(raw: str, low: int, high: int, label: str, errors: list[str]) -> int | None:
+    try:
+        value = int(raw)
+    except ValueError:
+        errors.append(f"{label} must be a whole number.")
+        return None
+    if not low <= value <= high:
+        errors.append(f"{label} must be between {low} and {high}.")
+        return None
+    return value
+
+
+@app.post("/settings", response_class=HTMLResponse)
+async def save_settings(request: Request, concurrency: str = Form("1"), bandwidth_kbps: str = Form("0"),
+                        free_space_reserve_gb: str = Form("50"), include_specials: str = Form(""),
+                        subtitles: str = Form("")):
+    errors: list[str] = []
+    values = {
+        "concurrency": _int_in(concurrency, 1, 4, "Downloads at a time", errors),
+        "bandwidth_kbps": _int_in(bandwidth_kbps, 0, 10_000_000, "Bandwidth cap", errors),
+        "free_space_reserve_gb": _int_in(free_space_reserve_gb, 0, 1_000_000, "Keep free", errors),
+    }
+    if errors:
+        return await _settings_page(request, errors=errors, status_code=400)
+    for key, value in values.items():
+        db.set_setting(key, str(value))
+    # Unticked checkboxes aren't sent at all, hence "" as the default.
+    db.set_setting("include_specials", "1" if include_specials == "1" else "0")
+    db.set_setting("subtitles", "1" if subtitles == "1" else "0")
+    queue.worker.poke()
+    return RedirectResponse("/settings?saved=1", status_code=303)
+
+
+@app.post("/settings/redetect")
+async def redetect_folders():
+    await dest_folders.detect(force=True)
+    mine.forget()
+    return RedirectResponse("/settings?saved=folders", status_code=303)
+
+
+@app.post("/settings/scan")
+async def scan_library():
+    ok = await dest_folders.refresh_library()
+    return RedirectResponse(f"/settings?saved={'scan' if ok else 'scan-failed'}", status_code=303)
 
 
 SSE_INTERVAL = 1.0

@@ -284,6 +284,12 @@ input:disabled, select:disabled { opacity: 0.5; }
   display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 2.4rem;
 }
 .item .poster img { width: 100%; height: 100%; object-fit: cover; }
+.item .poster { position: relative; }
+.on-server {
+  position: absolute; left: 6px; bottom: 6px; padding: 2px 8px; border-radius: 999px;
+  background: rgba(0, 0, 0, 0.8); border: 1px solid var(--neon); color: var(--neon);
+  font: 600 0.72rem var(--font); box-shadow: var(--glow); text-shadow: var(--text-glow);
+}
 .item h3 { font: 600 0.9rem/1.3 var(--font); letter-spacing: 0; margin: 4px 0 0; color: var(--text); }
 .item p { margin: 0; font-size: 0.8rem; }
 .item-actions { display: flex; flex-wrap: wrap; gap: 4px; margin-top: auto; }
@@ -294,6 +300,24 @@ input:disabled, select:disabled { opacity: 0.5; }
 .dest-missing { border-color: var(--neon); box-shadow: var(--glow); }
 
 .queue-badge { color: var(--neon) !important; text-shadow: var(--text-glow); }
+
+/* ---- settings ------------------------------------------------------------- */
+.settings-form { display: grid; grid-template-columns: max-content 1fr; gap: 14px 18px; align-items: start; }
+.settings-form > label, .settings-form > .label { padding-top: 9px; font-size: 0.85rem; color: var(--muted); }
+.settings-form input[type=number], .settings-form select { max-width: 220px; }
+.settings-form .check { padding-left: 0; }
+.settings-form .actions { grid-column: 1 / -1; justify-content: flex-start; }
+.hint { color: var(--muted); font-size: 0.8rem; margin: 4px 0 0; }
+.notice { color: var(--neon); text-shadow: var(--text-glow); margin: 0 0 16px; }
+.folder-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.folder-list li { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+.folder-list .ok i { color: var(--neon); }
+.folder-list .off { opacity: 0.6; }
+.facts { display: grid; grid-template-columns: max-content 1fr; gap: 6px 18px; margin: 0 0 8px; }
+.facts dt { color: var(--muted); }
+.facts dd { margin: 0; word-break: break-all; }
+.card-head form { margin: 0; }
+@media (max-width: 560px) { .settings-form, .facts { grid-template-columns: 1fr; } .settings-form > label, .settings-form > .label { padding-top: 0; } }
 
 /* ---- season picker -------------------------------------------------------- */
 .modal { color: var(--text); width: min(480px, calc(100vw - 32px)); max-height: calc(100vh - 64px); padding: 20px; }

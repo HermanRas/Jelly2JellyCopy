@@ -6,6 +6,7 @@
 # copies them, so they do not reach the published image.
 data
 samples
+docs
 .env
 *.key
 __pycache__

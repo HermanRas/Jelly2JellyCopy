@@ -5,6 +5,7 @@ path and size; changing the destination picker later never moves a job.
 """
 from __future__ import annotations
 
+from collections import Counter
 from dataclasses import dataclass, field
 
 from app import connection, db, jellyfin, naming
@@ -21,6 +22,14 @@ class Plan:
     @property
     def bytes(self) -> int:
         return sum(j["size"] or 0 for j in self.jobs)
+
+    @property
+    def main_jobs(self) -> list[dict]:
+        return [j for j in self.jobs if j["kind"] != "subtitle"]
+
+    @property
+    def subtitle_jobs(self) -> list[dict]:
+        return [j for j in self.jobs if j["kind"] == "subtitle"]
 
 
 def include_specials() -> bool:
@@ -63,6 +72,51 @@ def _job(plan: Plan, *, server_id: str, root: str, item: dict, kind: str, name: 
     plan.jobs.append({"server_id": server_id, "source_item_id": item["Id"], "kind": kind,
                       "display_name": name, "dest_root": root, "target_path": target,
                       "download_path": f"/Items/{item['Id']}/Download", "size": size})
+    if kind in ("episode", "movie") and include_subtitles():
+        _subtitle_jobs(plan, server_id=server_id, root=root, item=item, name=name, video_target=target)
+
+
+# Text formats only: Jellyfin serves these as files. Image-based subtitles
+# (PGS, VobSub) can't be fetched through the stream endpoint as a file.
+TEXT_SUBTITLES = {"srt", "subrip", "ass", "ssa", "vtt", "webvtt"}
+
+
+def include_subtitles() -> bool:
+    return db.get_setting("subtitles", "1") == "1"
+
+
+def _subtitle_jobs(plan: Plan, *, server_id: str, root: str, item: dict, name: str, video_target: str) -> None:
+    """External subtitle files sit next to the video on the source, not
+    inside it, so /Items/{id}/Download doesn't bring them along."""
+    sources = item.get("MediaSources") or []
+    if not sources:
+        return
+    source = sources[0]
+    subs = [s for s in source.get("MediaStreams") or []
+            if s.get("Type") == "Subtitle" and s.get("IsExternal")
+            and (s.get("Codec") or "").lower() in TEXT_SUBTITLES]
+    per_language = Counter((s.get("Language") or "und").lower() for s in subs)
+    for s in subs:
+        lang = (s.get("Language") or "und").lower()
+        ext = naming.SUBTITLE_EXT[(s.get("Codec") or "").lower()]
+        # Two subtitles in one language need telling apart in the file name.
+        index = s.get("Index") if per_language[lang] > 1 else None
+        target = naming.subtitle_path(video_target, lang, s.get("Codec"), bool(s.get("IsForced")), index)
+        try:
+            naming.check_inside(root, target)
+        except naming.UnsafePath:
+            plan.unsafe += 1
+            continue
+        plan.jobs.append({
+            "server_id": server_id,
+            # One item can carry several subtitles; each needs its own
+            # identity for the duplicate check.
+            "source_item_id": f"{item['Id']}:{s.get('Index')}",
+            "kind": "subtitle", "display_name": f"{name} (subtitles, {lang})",
+            "dest_root": root, "target_path": target,
+            "download_path": f"/Videos/{item['Id']}/{source.get('Id') or item['Id']}"
+                             f"/Subtitles/{s.get('Index')}/Stream.{ext}",
+            "size": None})
 
 
 # ---- series ----------------------------------------------------------------------

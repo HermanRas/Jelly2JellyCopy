@@ -190,3 +190,43 @@ def test_library_page_has_season_picker(connected):
     page = connected.get(f"/browse/{SHOWS}").text
     assert 'id="seasons-modal"' in page
     assert "dest-missing" in page
+
+
+def with_subs(item, streams):
+    item = {**item, "MediaSources": [{**item["MediaSources"][0], "Id": "ms" + item["Id"][2:], "MediaStreams": streams}]}
+    return item
+
+
+SUBS = [
+    {"Type": "Subtitle", "Index": 2, "Codec": "subrip", "Language": "eng", "IsExternal": True},
+    {"Type": "Subtitle", "Index": 3, "Codec": "subrip", "Language": "eng", "IsExternal": True, "IsForced": True},
+    {"Type": "Subtitle", "Index": 4, "Codec": "ass", "Language": "fre", "IsExternal": True},
+    {"Type": "Subtitle", "Index": 5, "Codec": "pgssub", "Language": "ger", "IsExternal": True},   # image: skipped
+    {"Type": "Subtitle", "Index": 6, "Codec": "subrip", "Language": "spa", "IsExternal": False},  # embedded: in the file
+    {"Type": "Audio", "Index": 1, "Codec": "aac"},
+]
+
+
+def test_external_subtitles_ride_along(connected, source):
+    pilot = with_subs(ep(1, 1, S1, name="Pilot"), SUBS)
+    source.get(f"{SRC}/Shows/{SERIES}/Episodes").respond(json={"Items": [pilot]})
+    tv = str(connected.tmp / "tv")
+    body = queue(connected, library_id=SHOWS, item_id=SERIES, type="Series", dest=tv, which="first").json()
+    assert (body["added"], body["subtitles"]) == (1, 3)
+    subs = [j for j in jobs() if j["kind"] == "subtitle"]
+    base = f"{tv}/The Show (2011)/Season 01/The Show - S01E01 - Pilot"
+    assert [j["target_path"] for j in subs] == [f"{base}.eng.2.srt", f"{base}.eng.3.forced.srt", f"{base}.fre.ass"]
+    ms = pilot["MediaSources"][0]["Id"]
+    assert subs[0]["download_path"] == f"/Videos/{pilot['Id']}/{ms}/Subtitles/2/Stream.srt"
+    assert subs[0]["size"] is None
+    # The video is queued ahead of its subtitles.
+    assert jobs()[0]["kind"] == "episode"
+
+
+def test_subtitles_setting_off(connected, source):
+    db.set_setting("subtitles", "0")
+    source.get(f"{SRC}/Shows/{SERIES}/Episodes").respond(json={"Items": [with_subs(ep(1, 1, S1), SUBS)]})
+    body = queue(connected, library_id=SHOWS, item_id=SERIES, type="Series",
+                 dest=str(connected.tmp / "tv"), which="first").json()
+    assert body["subtitles"] == 0
+    assert all(j["kind"] == "episode" for j in jobs())

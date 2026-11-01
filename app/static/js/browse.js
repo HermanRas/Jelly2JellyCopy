@@ -54,7 +54,14 @@ function card(item) {
 
   const poster = document.createElement("div");
   poster.className = "poster";
-  const fallback = () => { poster.innerHTML = `<i class="bi ${ICONS[item.type] || "bi-collection-play"}"></i>`; };
+  // Swaps only the image for an icon, so the badge (added below) survives a
+  // poster that fails to load.
+  const fallback = () => {
+    const icon = document.createElement("i");
+    icon.className = `bi ${ICONS[item.type] || "bi-collection-play"}`;
+    poster.querySelector("img")?.remove();
+    poster.prepend(icon);
+  };
   if (item.has_image) {
     const img = document.createElement("img");
     img.loading = "lazy";
@@ -64,6 +71,13 @@ function card(item) {
     poster.appendChild(img);
   } else {
     fallback();
+  }
+  if (item.on_server) {
+    const badge = document.createElement("span");
+    badge.className = "on-server";
+    badge.innerHTML = '<i class="bi bi-check-lg"></i> On my server';
+    poster.appendChild(badge);
+    el.classList.add("have-it");
   }
 
   const name = document.createElement("h3");
@@ -136,6 +150,7 @@ async function enqueue(item, options) {
       ? `Queued ${r.added} ${r.added === 1 ? one : many}${r.bytes ? ` (${size(r.bytes)})` : ""} → ${r.dest}`
       : `Nothing new to queue for ${item.name}`;
     const notes = [];
+    if (r.subtitles) notes.push(`+${r.subtitles} subtitle file${r.subtitles === 1 ? "" : "s"}`);
     if (r.already_queued) notes.push(`${r.already_queued} already queued`);
     if (r.unavailable) notes.push(`${r.unavailable} have no file on the source`);
     if (r.unsafe) notes.push(`${r.unsafe} skipped: unsafe name`);

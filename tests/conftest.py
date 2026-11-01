@@ -14,7 +14,7 @@ os.environ["J2J_WORKER"] = "0"
 
 from fastapi.testclient import TestClient  # noqa: E402
 
-from app import auth, config, db, dest_folders  # noqa: E402
+from app import auth, config, db, dest_folders, mine  # noqa: E402
 from app.main import app  # noqa: E402
 
 
@@ -26,6 +26,7 @@ def _fresh_state(monkeypatch):
     monkeypatch.setattr(config, "DEST_FOLDERS", "")
     auth._failures.clear()
     dest_folders._cache = None
+    mine.forget()
     db.db_path().unlink(missing_ok=True)
     db.init()
     yield
