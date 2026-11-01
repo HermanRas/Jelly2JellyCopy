@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-head">
+  <a class="back" href="/browse"><i class="bi bi-chevron-left"></i> Libraries</a>
+  <h1>{{ lib.name }} <span class="muted lib-type">{{ lib.type or "mixed" }}</span></h1>
+</div>
+
+{# Pinned at the top and asked every time a library is opened: someone with
+   both /movies and /kids-movies must never have the choice made silently. #}
+<section class="card dest-card" id="dest-card" data-library="{{ lib.id }}">
+  <label for="dest">Download to</label>
+  <select id="dest" {% if not folders %}disabled{% endif %}>
+    <option value="" {% if not selected %}selected{% endif %} disabled>Choose a destination folder…</option>
+    {% for f in folders %}
+    <option value="{{ f.path }}" {% if f.path == selected %}selected{% endif %} {% if not f.available %}disabled{% endif %}>
+      {{ f.library }} — {{ f.path }}{% if not f.available %} ({{ f.reason }}){% endif %}
+    </option>
+    {% endfor %}
+  </select>
+  <p class="muted dest-note">
+    {% if not folders %}
+      No destination folders found. Set <code>J2J_DEST_URL</code> and <code>J2J_DEST_API_KEY</code>, or
+      <code>J2J_DEST_FOLDERS</code>, and mount the folders into this container.
+    {% else %}
+      Found via {{ {"api": "your Jellyfin's libraries", "env": "J2J_DEST_FOLDERS", "mounts": "the folders mounted into this container"}[detection.method] }}.
+    {% endif %}
+    {% if detection.warning %}<span class="error">{{ detection.warning }}</span>{% endif %}
+  </p>
+</section>
+
+<div class="toolbar">
+  <div class="search">
+    <i class="bi bi-search"></i>
+    <input id="search" type="search" placeholder="Search {{ lib.name }}…" autocomplete="off">
+  </div>
+  <nav class="az" id="az" aria-label="Filter by first letter">
+    <button data-letter="" class="active">All</button>
+    <button data-letter="#">#</button>
+    {% for c in "ABCDEFGHIJKLMNOPQRSTUVWXYZ" %}<button data-letter="{{ c }}">{{ c }}</button>{% endfor %}
+  </nav>
+</div>
+
+<p class="muted" id="count"></p>
+<div class="item-grid" id="items" data-library="{{ lib.id }}"></div>
+<div id="more" class="muted loading-more" hidden><i class="bi bi-hourglass-split"></i> Loading…</div>
+<div id="sentinel"></div>
+{% endblock %}
+
+{% block scripts %}<script src="/static/js/browse.js"></script>{% endblock %}

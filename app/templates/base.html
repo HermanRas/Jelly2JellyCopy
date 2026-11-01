@@ -25,6 +25,9 @@
     <a class="brand" href="/"><i class="bi bi-arrow-left-right"></i> Jelly2Jelly<span>Copy</span></a>
     <nav>
       <a href="/" class="{{ 'active' if request.url.path == '/' }}"><i class="bi bi-activity"></i> Status</a>
+      {% if connected() %}
+      <a href="/browse" class="{{ 'active' if request.url.path.startswith('/browse') }}"><i class="bi bi-cloud-arrow-down"></i> Download</a>
+      {% endif %}
       <form method="post" action="/logout">
         <button type="submit" class="link"><i class="bi bi-box-arrow-right"></i> Log out</button>
       </form>

@@ -13,14 +13,18 @@ os.environ.pop("J2J_APP_PASSWORD", None)
 
 from fastapi.testclient import TestClient  # noqa: E402
 
-from app import auth, config, db  # noqa: E402
+from app import auth, config, db, dest_folders  # noqa: E402
 from app.main import app  # noqa: E402
 
 
 @pytest.fixture(autouse=True)
 def _fresh_state(monkeypatch):
     monkeypatch.setattr(config, "APP_PASSWORD", config.DEFAULT_APP_PASSWORD)
+    monkeypatch.setattr(config, "DEST_URL", "")
+    monkeypatch.setattr(config, "DEST_API_KEY", "")
+    monkeypatch.setattr(config, "DEST_FOLDERS", "")
     auth._failures.clear()
+    dest_folders._cache = None
     db.db_path().unlink(missing_ok=True)
     db.init()
     yield

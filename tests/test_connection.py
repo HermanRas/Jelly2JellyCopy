@@ -7,26 +7,13 @@ import pytest
 import respx
 
 from app import connection, db, jellyfin
-
-SRC = "https://src.example.com"
-TOKEN = "tok-0123456789abcdef"
-PUBLIC_INFO = {"ServerName": "Friend's Jelly", "Version": "12.3.0",
-               "ProductName": "Jellyfin Server", "Id": "srv123"}
-
-
-def auth_ok(downloads=True):
-    return {"AccessToken": TOKEN, "ServerId": "srv123", "SessionInfo": {},
-            "User": {"Name": "alice", "Id": "user1",
-                     "Policy": {"EnableContentDownloading": downloads, "IsAdministrator": False}}}
+from fakes import PUBLIC_INFO, SRC, TOKEN, auth_ok, mock_source
 
 
 @pytest.fixture
 def source():
-    with respx.mock(base_url=SRC, assert_all_called=False) as mock:
-        mock.get("/System/Info/Public").respond(json=PUBLIC_INFO)
-        mock.post("/Users/AuthenticateByName").respond(json=auth_ok())
-        mock.post("/Sessions/Logout").respond(204)
-        yield mock
+    with respx.mock(assert_all_called=False) as mock:
+        yield mock_source(mock)
 
 
 def connect(client, url=SRC, pw="secret"):
@@ -76,7 +63,7 @@ def test_status_page_shows_connection(logged_in, source):
 
 
 def test_wrong_password(logged_in, source):
-    source.post("/Users/AuthenticateByName").respond(401)
+    source.post(SRC + "/Users/AuthenticateByName").respond(401)
     r = connect(logged_in, pw="nope")
     assert r.status_code == 400
     assert r.json()["error"] == "wrong_password"
@@ -84,7 +71,7 @@ def test_wrong_password(logged_in, source):
 
 
 def test_no_download_permission_logs_out_again(logged_in, source):
-    source.post("/Users/AuthenticateByName").respond(json=auth_ok(downloads=False))
+    source.post(SRC + "/Users/AuthenticateByName").respond(json=auth_ok(downloads=False))
     r = connect(logged_in)
     assert r.json()["error"] == "no_download"
     assert db.get_connection() is None
@@ -95,12 +82,12 @@ def test_no_download_permission_logs_out_again(logged_in, source):
 
 
 def test_not_jellyfin(logged_in, source):
-    source.get("/System/Info/Public").respond(200, html="<html>nginx</html>")
+    source.get(SRC + "/System/Info/Public").respond(200, html="<html>nginx</html>")
     assert connect(logged_in).json()["error"] == "not_jellyfin"
 
 
 def test_unreachable(logged_in, source):
-    source.get("/System/Info/Public").mock(side_effect=httpx.ConnectError("refused"))
+    source.get(SRC + "/System/Info/Public").mock(side_effect=httpx.ConnectError("refused"))
     r = connect(logged_in)
     assert r.status_code == 502
     assert r.json()["error"] == "unreachable"
@@ -122,14 +109,14 @@ def test_disconnect_logs_out_and_destroys_token(logged_in, source):
 
 def test_disconnect_survives_source_being_down(logged_in, source):
     connect(logged_in)
-    source.post("/Sessions/Logout").mock(side_effect=httpx.ConnectError("down"))
+    source.post(SRC + "/Sessions/Logout").mock(side_effect=httpx.ConnectError("down"))
     assert logged_in.post("/api/disconnect").status_code == 200
     assert db.get_connection() is None
 
 
 def test_401_from_source_forgets_token_and_pauses(logged_in, source):
     connect(logged_in)
-    source.get("/Users/Me").respond(401)
+    source.get(SRC + "/Users/Me").respond(401)
     with pytest.raises(jellyfin.TokenRejected):
         asyncio.run(connection.request("GET", "/Users/Me"))
     assert db.get_connection() is None
@@ -138,7 +125,7 @@ def test_401_from_source_forgets_token_and_pauses(logged_in, source):
 
 def test_authenticated_request_sends_token(logged_in, source):
     connect(logged_in)
-    me = source.get("/Users/Me").respond(json={"Name": "alice"})
+    me = source.get(SRC + "/Users/Me").respond(json={"Name": "alice"})
     r = asyncio.run(connection.request("GET", "/Users/Me"))
     assert r.json()["Name"] == "alice"
     assert f'Token="{TOKEN}"' in me.calls.last.request.headers["Authorization"]

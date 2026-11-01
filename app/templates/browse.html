@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-head">
+  <h1>Libraries</h1>
+  <p class="muted">on {{ conn.server_name }} &middot; pick one to browse it</p>
+</div>
+
+{% set icons = {"movies": "bi-film", "tvshows": "bi-tv", "music": "bi-music-note-beamed"} %}
+<div class="lib-grid">
+  {% for lib in libraries %}
+  <a class="tile lib-tile" href="/browse/{{ lib.id }}">
+    <i class="bi {{ icons.get(lib.type, 'bi-collection-play') }}"></i>
+    <span class="lib-name">{{ lib.name }}</span>
+    <span class="muted lib-meta">{{ lib.type or "mixed" }} &middot; {{ lib.count }} items</span>
+  </a>
+  {% else %}
+  <p class="muted">This user can't see any libraries on the source server.</p>
+  {% endfor %}
+</div>
+{% endblock %}

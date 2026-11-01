@@ -5,12 +5,12 @@ from contextlib import asynccontextmanager
 from urllib.parse import quote
 
 from fastapi import FastAPI, Form, Request
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 
-from app import auth, config, connection, db, jellyfin
+from app import auth, browse, config, connection, db, dest_folders, jellyfin
 
 
 @asynccontextmanager
@@ -33,6 +33,7 @@ templates.env.globals["version"] = config.VERSION
 # A function, not a value: tests (and a future settings reload) change the
 # password without re-importing this module.
 templates.env.globals["default_password"] = auth.using_default_password
+templates.env.globals["connected"] = lambda: connection.current() is not None
 
 # Reachable without a session. Static files carry nothing sensitive, and the
 # login page needs its stylesheet and icon.
@@ -48,6 +49,27 @@ async def require_login(request: Request, call_next):
         return JSONResponse({"detail": "login required"}, status_code=401)
     target = path + (f"?{request.url.query}" if request.url.query else "")
     return RedirectResponse(f"/login?next={quote(target)}", status_code=303)
+
+
+@app.exception_handler(jellyfin.SourceError)
+async def source_error(request: Request, exc: jellyfin.SourceError):
+    """Problems with the source server, in plain words.
+
+    A rejected token has already been forgotten by connection.request, so the
+    answer is always "connect again": pages go back to the status card, API
+    callers get 409 (not 401, which the browser code reads as "app login
+    expired").
+    """
+    api = request.url.path.startswith("/api/")
+    if isinstance(exc, jellyfin.TokenRejected):
+        if api:
+            return JSONResponse({"error": "reconnect", "detail": exc.message}, status_code=409)
+        return RedirectResponse("/", status_code=303)
+    if api:
+        return JSONResponse({"error": exc.code, "detail": exc.message}, status_code=502)
+    return templates.TemplateResponse(request, "error.html",
+                                      {"title": "Source server problem", "detail": exc.message},
+                                      status_code=502)
 
 
 def _safe_next(next_url: str) -> str:
@@ -149,3 +171,73 @@ async def api_connect(body: ConnectBody):
 async def api_disconnect():
     await connection.disconnect()
     return {"connected": False, "connection": None}
+
+
+# ---- browse ----------------------------------------------------------------
+
+def _dest_key(library_id: str) -> str:
+    return f"dest:{library_id}"
+
+
+@app.get("/browse", response_class=HTMLResponse)
+async def browse_page(request: Request):
+    if connection.current() is None:
+        return RedirectResponse("/", status_code=303)
+    return templates.TemplateResponse(request, "browse.html", {
+        "title": "Download", "conn": connection.current(), "libraries": await browse.libraries()})
+
+
+@app.get("/browse/{library_id}", response_class=HTMLResponse)
+async def library_page(request: Request, library_id: str):
+    if connection.current() is None:
+        return RedirectResponse("/", status_code=303)
+    lib = await browse.library(library_id) if browse.valid_id(library_id) else None
+    if lib is None:
+        return RedirectResponse("/browse", status_code=303)
+
+    detection = await dest_folders.detect()
+    folders = dest_folders.offered(detection, lib["type"])
+    # Pre-select the last folder used for this library, but only if it is
+    # still on offer and writable; otherwise the picker starts empty and the
+    # user has to choose.
+    last = db.get_setting(_dest_key(library_id))
+    selected = last if any(f.path == last and f.available for f in folders) else ""
+    return templates.TemplateResponse(request, "library.html", {
+        "title": lib["name"], "lib": lib, "folders": folders, "selected": selected,
+        "detection": detection})
+
+
+@app.get("/api/libraries/{library_id}/items")
+async def api_items(library_id: str, start: int = 0, search: str = "", letter: str = ""):
+    if not browse.valid_id(library_id):
+        return JSONResponse({"error": "bad_id"}, status_code=400)
+    letter = letter[:1].upper() if letter != "#" else "#"
+    return await browse.items(library_id, start=start, search=search.strip()[:100], letter=letter)
+
+
+class DestBody(BaseModel):
+    path: str
+
+
+@app.post("/api/libraries/{library_id}/dest")
+async def api_set_dest(library_id: str, body: DestBody):
+    if not browse.valid_id(library_id):
+        return JSONResponse({"error": "bad_id"}, status_code=400)
+    lib = await browse.library(library_id)
+    if lib is None:
+        return JSONResponse({"error": "not_found"}, status_code=404)
+    folders = dest_folders.offered(await dest_folders.detect(), lib["type"])
+    # Only a folder we offered and can write to: this path later decides
+    # where files land on disk, so it is never taken on trust from the browser.
+    if not any(f.path == body.path and f.available for f in folders):
+        return JSONResponse({"error": "bad_folder", "detail": "That folder isn't on offer."},
+                            status_code=400)
+    db.set_setting(_dest_key(library_id), body.path)
+    return {"path": body.path}
+
+
+@app.get("/api/items/{item_id}/poster")
+async def api_poster(item_id: str):
+    if not browse.valid_id(item_id):
+        return Response(status_code=404)
+    return await browse.poster(item_id)
