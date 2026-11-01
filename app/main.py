@@ -1,16 +1,26 @@
 """FastAPI entrypoint: routes, the login gate and /healthz."""
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
 from urllib.parse import quote
 
 from fastapi import FastAPI, Form, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from pydantic import BaseModel
 
-from app import auth, config
+from app import auth, config, connection, db, jellyfin
 
-app = FastAPI(title=config.APP_NAME, docs_url=None, redoc_url=None, openapi_url=None)
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    db.init()
+    yield
+
+
+app = FastAPI(title=config.APP_NAME, docs_url=None, redoc_url=None, openapi_url=None,
+              lifespan=lifespan)
 
 # Two static mounts: our own files from the repo, vendored assets from the image.
 app.mount("/static", StaticFiles(directory=config.BASE_DIR / "static"), name="static")
@@ -109,4 +119,33 @@ async def logout():
 
 @app.get("/", response_class=HTMLResponse)
 async def status_page(request: Request):
-    return templates.TemplateResponse(request, "status.html", {"title": "Status"})
+    return templates.TemplateResponse(request, "status.html",
+                                      {"title": "Status", "conn": connection.current()})
+
+
+class ConnectBody(BaseModel):
+    url: str
+    username: str
+    password: str
+
+
+@app.get("/api/connection")
+async def api_connection():
+    return {"connected": (conn := connection.current()) is not None, "connection": conn}
+
+
+@app.post("/api/connect")
+async def api_connect(body: ConnectBody):
+    try:
+        conn = await connection.connect(body.url, body.username, body.password)
+    except jellyfin.SourceError as e:
+        # 400 for "your input is wrong", 502 for "the other server is the problem".
+        status = 502 if isinstance(e, jellyfin.Unreachable) else 400
+        return JSONResponse({"error": e.code, "detail": e.message}, status_code=status)
+    return {"connected": True, "connection": conn}
+
+
+@app.post("/api/disconnect")
+async def api_disconnect():
+    await connection.disconnect()
+    return {"connected": False, "connection": None}

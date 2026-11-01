@@ -97,6 +97,11 @@ h2 { font-size: 0.95rem; text-transform: uppercase; color: var(--neon); margin: 
 }
 .card-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
 .empty { margin: 0; }
+.card .actions { display: flex; gap: 10px; justify-content: flex-end; }
+.conn-info p { margin: 0 0 4px; }
+.conn-server { font-size: 1.1rem; }
+.conn-url { word-break: break-all; margin-bottom: 16px !important; }
+.form-grid .error { grid-column: 1 / -1; }
 
 .status-grid { display: grid; grid-template-columns: 1fr 160px; gap: 20px; align-items: start; }
 @media (max-width: 640px) { .status-grid { grid-template-columns: 1fr; } }

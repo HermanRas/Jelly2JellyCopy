@@ -5,12 +5,14 @@ the media folders, so every page except /login and /healthz sits behind this.
 """
 from __future__ import annotations
 
+import base64
 import hashlib
 import hmac
 import secrets
 import time
 from collections import defaultdict, deque
 
+from cryptography.fernet import Fernet, InvalidToken
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
 from app import config
@@ -36,6 +38,26 @@ def secret() -> str:
                 path.chmod(0o600)
             _secret = path.read_text().strip()
     return _secret
+
+
+def _fernet() -> Fernet:
+    # Fernet wants exactly 32 url-safe base64 bytes; J2J_SECRET can be any
+    # string, so derive the key rather than demand a particular format.
+    key = hashlib.sha256(b"j2j-token:" + secret().encode()).digest()
+    return Fernet(base64.urlsafe_b64encode(key))
+
+
+def encrypt_token(token: str) -> str:
+    return _fernet().encrypt(token.encode()).decode()
+
+
+def decrypt_token(token_enc: str) -> str | None:
+    """None when the secret changed since the token was stored: the token is
+    then unusable and the user simply connects again."""
+    try:
+        return _fernet().decrypt(token_enc.encode()).decode()
+    except InvalidToken:
+        return None
 
 
 def using_default_password() -> bool:
