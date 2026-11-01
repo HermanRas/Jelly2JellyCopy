@@ -39,6 +39,11 @@ download resumes where it stopped.
 
 ![The download queue, paused, with a half-finished download and a failed item](docs/screenshots/queue-paused.png)
 
+**Settings.** Downloads at a time, a bandwidth cap, free space to keep, and
+the destination folders found on your Jellyfin.
+
+![The settings page](docs/screenshots/settings.png)
+
 <sub>Screenshots use a demo server with made-up titles.</sub>
 
 ## Features
