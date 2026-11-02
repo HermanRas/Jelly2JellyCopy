@@ -16,6 +16,15 @@ function bytes(n) {
   return `${n.toFixed(i >= 3 ? 2 : i ? 1 : 0)} ${units[i]}`;
 }
 
+// Line speeds are quoted in bits, so show transfer rates the same way.
+function bitrate(bytesPerSec) {
+  let n = bytesPerSec * 8;
+  const units = ["bps", "Kbps", "Mbps", "Gbps"];
+  let i = 0;
+  while (n >= 1000 && i < units.length - 1) { n /= 1000; i += 1; }
+  return `${n.toFixed(i ? 1 : 0)} ${units[i]}`;
+}
+
 function eta(job) {
   if (!job.speed || !job.size) return "";
   const s = Math.max(0, (job.size - job.bytes_done) / job.speed);
@@ -47,7 +56,7 @@ function row(job) {
   if (job.status === "downloading") {
     const pct = job.size ? Math.floor((job.bytes_done / job.size) * 100) : null;
     state.textContent = [pct != null ? `${pct}%` : bytes(job.bytes_done),
-                         job.speed ? `${bytes(job.speed)}/s` : "", eta(job)].filter(Boolean).join(" · ");
+                         job.speed ? bitrate(job.speed) : "", eta(job)].filter(Boolean).join(" · ");
   } else {
     state.textContent = STATUS_TEXT[job.status] || job.status;
     if (job.size && ["queued", "paused"].includes(job.status)) state.textContent += ` · ${bytes(job.size)}`;
