@@ -360,7 +360,7 @@ async def api_job_retry(job_id: int):
 def _settings() -> dict:
     return {
         "concurrency": queue.concurrency(),
-        "bandwidth_kbps": queue.bandwidth_bytes() // 1024,
+        "bandwidth_kbit": queue.bandwidth_kbit(),
         "free_space_reserve_gb": queue.reserve_bytes() // 1_000_000_000,
         "include_specials": enqueue.include_specials(),
         "subtitles": enqueue.include_subtitles(),
@@ -398,13 +398,13 @@ def _int_in(raw: str, low: int, high: int, label: str, errors: list[str]) -> int
 
 
 @app.post("/settings", response_class=HTMLResponse)
-async def save_settings(request: Request, concurrency: str = Form("1"), bandwidth_kbps: str = Form("0"),
+async def save_settings(request: Request, concurrency: str = Form("1"), bandwidth_kbit: str = Form("0"),
                         free_space_reserve_gb: str = Form("50"), include_specials: str = Form(""),
                         subtitles: str = Form("")):
     errors: list[str] = []
     values = {
         "concurrency": _int_in(concurrency, 1, 4, "Downloads at a time", errors),
-        "bandwidth_kbps": _int_in(bandwidth_kbps, 0, 10_000_000, "Bandwidth cap", errors),
+        "bandwidth_kbit": _int_in(bandwidth_kbit, 0, 10_000_000, "Bandwidth cap", errors),
         "free_space_reserve_gb": _int_in(free_space_reserve_gb, 0, 1_000_000, "Keep free", errors),
     }
     if errors:

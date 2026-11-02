@@ -39,12 +39,21 @@ def concurrency() -> int:
         return 1
 
 
-def bandwidth_bytes() -> int:
-    """Cap in bytes/s; 0 = unlimited. Stored in KB/s, as the settings page shows it."""
+def bandwidth_kbit() -> int:
+    """Cap in kilobits/s, as the settings page shows it; 0 = unlimited."""
     try:
-        return max(int(db.get_setting("bandwidth_kbps", "0")), 0) * 1024
+        kbit = db.get_setting("bandwidth_kbit")
+        if kbit is not None:
+            return max(int(kbit), 0)
+        # Before 1.0.2 the cap was stored in KB/s (1024 bytes).
+        return round(max(int(db.get_setting("bandwidth_kbps", "0")), 0) * 1024 * 8 / 1000)
     except ValueError:
         return 0
+
+
+def bandwidth_bytes() -> int:
+    """Cap in bytes/s; 0 = unlimited."""
+    return bandwidth_kbit() * 1000 // 8
 
 
 def reserve_bytes() -> int:

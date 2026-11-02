@@ -15,11 +15,12 @@ def test_defaults(logged_in):
 
 
 def test_save(logged_in):
-    r = logged_in.post("/settings", data={"concurrency": "3", "bandwidth_kbps": "500",
+    r = logged_in.post("/settings", data={"concurrency": "3", "bandwidth_kbit": "2500",
                                           "free_space_reserve_gb": "10", "include_specials": "1"})
     assert r.status_code == 303
     assert queue.concurrency() == 3
-    assert queue.bandwidth_bytes() == 500 * 1024
+    assert queue.bandwidth_kbit() == 2500
+    assert queue.bandwidth_bytes() == 312_500
     assert queue.reserve_bytes() == 10 * 1_000_000_000
     assert enqueue.include_specials() is True
     # Not ticked = not sent = off.
@@ -27,8 +28,14 @@ def test_save(logged_in):
     assert "Saved." in logged_in.get("/settings?saved=1").text
 
 
+def test_old_kilobyte_cap_is_converted(logged_in):
+    db.set_setting("bandwidth_kbps", "500")
+    assert queue.bandwidth_kbit() == 4096
+    assert 'name="bandwidth_kbit" type="number" min="0" max="10000000" value="4096"' in logged_in.get("/settings").text
+
+
 def test_invalid_values_are_refused(logged_in):
-    r = logged_in.post("/settings", data={"concurrency": "9", "bandwidth_kbps": "-1",
+    r = logged_in.post("/settings", data={"concurrency": "9", "bandwidth_kbit": "-1",
                                           "free_space_reserve_gb": "abc"})
     assert r.status_code == 400
     assert "between 1 and 4" in r.text

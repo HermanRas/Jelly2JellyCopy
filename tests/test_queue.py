@@ -218,7 +218,7 @@ def test_not_enough_space(root, source):
 def test_bandwidth_cap_sleeps(root, source, monkeypatch):
     connect_fake()
     source.get(DOWNLOAD).mock(side_effect=ranged())
-    db.set_setting("bandwidth_kbps", "10")
+    db.set_setting("bandwidth_kbit", "80")
     slept = []
 
     async def fake_sleep(s):
@@ -226,8 +226,8 @@ def test_bandwidth_cap_sleeps(root, source, monkeypatch):
     monkeypatch.setattr(queue.asyncio, "sleep", fake_sleep)
     job, _ = run(add_job(root))
     assert job["status"] == "done"
-    # 100 KB at 10 KB/s should have asked for ~10s of waiting in total.
-    assert sum(slept) == pytest.approx(len(DATA) / 10240, rel=0.2)
+    # 80 Kbps is 10,000 bytes/s, so ~10s of waiting in total for 100 KB.
+    assert sum(slept) == pytest.approx(len(DATA) / 10_000, rel=0.2)
 
 
 def test_cancel_running_job_deletes_part(root, source):

@@ -16,10 +16,10 @@
       <p class="hint">One is kindest to the source server.</p>
     </div>
 
-    <label for="bandwidth">Bandwidth cap (KB/s)</label>
+    <label for="bandwidth">Bandwidth cap (Kbps)</label>
     <div>
-      <input id="bandwidth" name="bandwidth_kbps" type="number" min="0" max="10000000" value="{{ s.bandwidth_kbps }}">
-      <p class="hint">0 = no cap. Applies to each download.</p>
+      <input id="bandwidth" name="bandwidth_kbit" type="number" min="0" max="10000000" value="{{ s.bandwidth_kbit }}">
+      <p class="hint">Kilobits per second, so 2500 = 2.5 Mbps. 0 = no cap. Applies to each download.</p>
     </div>
 
     <label for="reserve">Keep free (GB)</label>
